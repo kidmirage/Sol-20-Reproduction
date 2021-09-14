@@ -1,20 +1,6 @@
 SVT1: Solace Virtual Tape Format 1
 L Contents of Proteus Cassette #2 -- Extended Cassette BASIC
 L
-
-S 50
-B 1200
-C 40
-
 F chase.ent
-C 40
-
 F chkr2.ent
-C 40
-
 F galaxy.ent
-C 40
-
-F pencl.ent
-C 40
-
