@@ -123,39 +123,43 @@ class IO:
                 # Add a program from an external file.
                 if line[0] == "F":     
                     file_name = line.split(" ")[1]
-                    with open("TAPEs/"+file_name, 'r') as f:
-                        file_bytes = bytearray()
-                        data_count = 0
-                        old_address = 0
-                       
-                        # For each line.
-                        for inline in f:
-                            inline = inline.strip()
-                            if len(inline) == 0:
-                                continue
-                            if inline[0] == "E":
-                                start_address = inline.split(" ")[1].strip().zfill(4)
-                            else:
-                                # Assume bytes are contiguous.
-                                tokens = inline.split(":")
-                                address = int(tokens[0], 16)
-                                if old_address > 0 and address - old_address != 16:
-                                    print("not contiguous", hex(address), hex(old_address))
-                                old_address = address
-                                data = tokens[1].strip().split(" ")
-                                for i in range(0, len(data)): 
-                                    file_bytes.append(int(data[i].replace('/', ''), 16))
-                                    data_count += 1
-                                    
-                        # Program name can only be 5 characters.
-                        name = file_name.split(".")[0].upper()
-                        name = name[0:5]
-                        data_size = hex(data_count)[2:].zfill(4)
-                        self.emit_header(tape, name, ord('C'), data_size, start_address, start_address)
-                        
-                        # Now write the data.
-                        self.write_data_with_crc(tape, file_bytes)                       
-                
+                    if file_name.endswith(".ENT"):
+                        with open("TAPEs/"+file_name, 'r') as f:
+                            file_bytes = bytearray()
+                            data_count = 0
+                            old_address = 0
+                           
+                            # For each line.
+                            for inline in f:
+                                inline = inline.strip()
+                                if len(inline) == 0:
+                                    continue
+                                if inline[0] == "E":
+                                    start_address = inline.split(" ")[1].strip().zfill(4)
+                                else:
+                                    # Assume bytes are contiguous.
+                                    tokens = inline.split(":")
+                                    address = int(tokens[0], 16)
+                                    if old_address > 0 and address - old_address != 16:
+                                        print("not contiguous", hex(address), hex(old_address))
+                                    old_address = address
+                                    data = tokens[1].strip().split(" ")
+                                    for i in range(0, len(data)): 
+                                        file_bytes.append(int(data[i].replace('/', ''), 16))
+                                        data_count += 1
+                                        
+                            # Program name can only be 5 characters.
+                            name = file_name.split(".")[0].upper()
+                            name = name[0:5]
+                            data_size = hex(data_count)[2:].zfill(4)
+                            self.emit_header(tape, name, ord('C'), data_size, start_address, start_address)
+                            
+                            # Now write the data.
+                            self.write_data_with_crc(tape, file_bytes)                       
+                    elif file_name.endswith(".HEX"):
+                        with open("TAPEs/"+file_name, 'rb') as f:
+                            tape.extend(f.read(-1))
+                            
                 # Process headers.
                 if line[0] == "H":      
                     
@@ -185,7 +189,55 @@ class IO:
                         
                     # Set the processing data flag.
                     processing_data = True  
-
+                    
+    def write_saved_program(self):
+        # Have to find the file name.
+        for i in range(0, len(self.virtual_tape_out)):
+            # Skip the leader.
+            if self.virtual_tape_out[i] < 2:
+                continue
+        
+            # Should be at the first letter of the name.
+            file_name = ""
+            while self.virtual_tape_out[i] > 0:
+                file_name = file_name + chr(self.virtual_tape_out[i])
+                i += 1
+            break
+        
+        # Now write the "program" out as a hex file.
+        file_name = file_name + ".HEX"
+        with open("TAPEs/"+file_name, 'wb') as f:
+             f.write(self.virtual_tape_out)
+             f.close()
+        
+        # See if there is an entry in the TAPE file and add one if there isn't.
+        if self.current_tape == self.virtual_tape_1:
+            tape_name = "TAPEs/TAPE1.svt"
+        else:
+            tape_name = "TAPEs/TAPE2.svt"
+        with open(tape_name, 'r+') as f:
+            # See if the filename is already there.
+            has_file_name = False
+            for line in f:
+                if file_name in line.upper():
+                    has_file_name = True
+                    break
+            f.close()
+            if not has_file_name:
+                with open(tape_name, 'a') as f:
+                    f.write("\n")
+                    f.write("F " + file_name)
+                    f.close()
+        
+        # Reload the current virtual tape.      
+        self.current_tape.clear()
+        try:
+            with open(tape_name, 'r') as f:
+                self.load_viurtual_tape(f, self.current_tape)
+        except FileNotFoundError:
+            print("Problem updating virtual tape.")
+                
+        
     def __init__(self):
         
         # Used for virtual keyboard.      
@@ -201,6 +253,10 @@ class IO:
         self.virtual_tape_1 = bytearray()
         self.virtual_tape_2 = bytearray()
         self.current_tape = self.virtual_tape_1
+        
+        # Store save data here before writing to disk.
+        self.virtual_tape_out = bytearray()
+        self.tape_on = False
         
         # Points to the current position on the tapes.
         self.tape_head = 0
@@ -234,14 +290,24 @@ class IO:
                 # Turn on the tape.
                 self.tape_head = 0
                 self.current_tape = self.virtual_tape_1
+                self.virtual_tape_out.clear()
+                self.tape_on = True
+                
             elif value == self.TT2:
                 # Turn on the tape.
                 self.tape_head = 0
                 self.current_tape = self.virtual_tape_2
+                self.virtual_tape_out.clear()
+                self.tape_on = True
+            else:
+                # Turn the tape off.
+                if self.tape_on and  len(self.virtual_tape_out) > 0:
+                    self.write_saved_program()
+                self_tape_on = False
                 
         elif port == 0xFB:
-            # 
-            print(hex(value))
+            # Write the byte to the virtual tape out.
+            self.virtual_tape_out.append(value)
         elif port == 0xF8:
             print("control" + hex(value))
         else:
@@ -258,7 +324,7 @@ class IO:
                 is_key = 0
             is_tape = 0
             if self.tape_head < len(self.current_tape):
-                is_tape = is_tape | self.TDR
+                is_tape = is_tape | self.TDR | self.TTBE
             result = is_key | is_tape
         elif port == 0xFB:
             result = self.current_tape[self.tape_head]

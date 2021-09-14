@@ -38,6 +38,7 @@ class Emulator:
         self.display_height = self.character_height * 16
         self.display_width = self.character_width * 64
         display_size = (self.display_width, self.display_height)
+        self.current_display_line = 0
         
         # Create the display characters based on the original Sol-20 ROM.
         self.characters = []
@@ -179,24 +180,38 @@ class Emulator:
         Draw the 64 x 16 text array on the screen.
 
         """
+        
+        # Display from the current scroll line to the end of the character buffer.
         x = 0
         y = 0
         for i in range(0xCC00+self.io.start_display_line*64, 0xCC00+1024):
             c = self._cpu.memory[i]
+            
+            # Blit the character to the display.
             self.screen.blit(self.characters[c],(x,y))
+
+            # Get ready for the next character.
             x += self.character_width;
             if x == self.character_width*64:
                 x = 0;
                 y += self.character_height
+                
+        # Display from the beginning of the character buffer to the current scroll line.
         x = 0
         for i in range(0xCC00,0xCC00+self.io.start_display_line*64):
             c = self._cpu.memory[i]
+            
+            # Blit the character to the display.
             self.screen.blit(self.characters[c],(x,y))
+            
+            # Get ready for the next character.
             x += self.character_width;
             if x == self.character_width*64:
                 x = 0;
                 y += self.character_height
-            
+                
+        self.current_display_line = self.io.start_display_line
+        
     def process_key(self, key, mod):
         keys = self.keymap.get(key)
         if keys != None:
@@ -246,6 +261,6 @@ class Emulator:
                 self._handle(event)
 
             self._cpu.run()
-            self._refresh()
-            if self._cpu.has_memory_changed():
+            if self._cpu.has_memory_changed() or self.current_display_line != self.io.start_display_line:
+                self._refresh()
                 pygame.display.update()
