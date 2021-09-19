@@ -116,7 +116,7 @@ class IO:
                     data_bytes.clear()
                     processing_data = False
                 
-                 # Ignore all but the header, data, and file lines.
+                # Ignore all but the header, data, and file lines.
                 if line[0] in ("S", "R" , "L", "B", "C"):                    
                     continue
                 
@@ -207,8 +207,8 @@ class IO:
         # Now write the "program" out as a hex file.
         file_name = file_name + ".HEX"
         with open("TAPEs/"+file_name, 'wb') as f:
-             f.write(self.virtual_tape_out)
-             f.close()
+            f.write(self.virtual_tape_out)
+            f.close()
         
         # See if there is an entry in the TAPE file and add one if there isn't.
         if self.current_tape == self.virtual_tape_1:
@@ -301,9 +301,9 @@ class IO:
                 self.tape_on = True
             else:
                 # Turn the tape off.
-                if self.tape_on and  len(self.virtual_tape_out) > 0:
+                if self.tape_on and len(self.virtual_tape_out) > 0:
                     self.write_saved_program()
-                self_tape_on = False
+                self.tape_on = False
                 
         elif port == 0xFB:
             # Write the byte to the virtual tape out.
