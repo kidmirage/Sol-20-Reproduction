@@ -13,7 +13,7 @@ class IO:
     TFE  = 8    # TAPE FRAMING ERROR
     TOE  = 16   # TAPE OVERFLOW ERROR
     TDR  = 64   # TAPE DATA READY
-    TTBE = 128  # TRANSMITTER BUFFER EMPTY
+    TTBE = 128  # TAPE TRANSMITTER BUFFER EMPTY
     SOK  = 1    # SCROLL OK
     
     TT1  = 128  # Turn on tape 1.  = 128  # Turn on tape 1.

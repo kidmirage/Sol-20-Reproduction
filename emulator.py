@@ -34,7 +34,7 @@ class Emulator:
         
         
         self.character_width = 10
-        self.character_height = 15                         
+        self.character_height = 27                       
         self.display_height = self.character_height * 16
         self.display_width = self.character_width * 64
         display_size = (self.display_width, self.display_height)
@@ -48,20 +48,22 @@ class Emulator:
             for c in range(0,128):
                 image = pygame.Surface((self.character_width, self.character_height), depth=8)
                 if c in (0x67, 0x6A, 0x70, 0x71, 0x79, 0x2C, 0x3B):
-                    for row in range(5,14):
-                        byte = romBytes[c*16+row-5]
+                    for row in range(4,14):
+                        byte = romBytes[c*16+row-4]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
-                                image.set_at((col+1, row+1), self.WHITE)
+                                image.set_at((col+1, row*2+1), self.WHITE)
+                                image.set_at((col+1, row*2+2), self.WHITE)
                             bit = bit >> 1
                 else:
-                    for row in range(2,14):
-                        byte = romBytes[c*16+row-2]
+                    for row in range(1,14):
+                        byte = romBytes[c*16+row-1]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
-                                image.set_at((col+1, row), self.WHITE)
+                                image.set_at((col+1, row*2), self.WHITE)
+                                image.set_at((col+1, row*2+1), self.WHITE)
                             bit = bit >> 1
                 self.characters.append(image)
                 
@@ -70,20 +72,22 @@ class Emulator:
                 image = pygame.Surface((self.character_width, self.character_height), depth=8)
                 image.fill(self.WHITE)
                 if c in (0x67, 0x6A, 0x70, 0x71, 0x79, 0x2C, 0x3B):
-                    for row in range(5,14):
-                        byte = romBytes[c*16+row-5]
+                    for row in range(4,14):
+                        byte = romBytes[c*16+row-4]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
-                                image.set_at((col+1, row), self.BLACK)
+                                image.set_at((col+1, row*2+1), self.BLACK)
+                                image.set_at((col+1, row*2+2), self.BLACK)
                             bit = bit >> 1
                 else:
-                    for row in range(2,14):
-                        byte = romBytes[c*16+row-2]
+                    for row in range(1,14):
+                        byte = romBytes[c*16+row-1]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
-                                image.set_at((col+1, row), self.BLACK)
+                                image.set_at((col+1, row*2), self.BLACK)
+                                image.set_at((col+1, row*2+1), self.BLACK)
                             bit = bit >> 1
                 self.characters.append(image)
                 
