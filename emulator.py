@@ -34,7 +34,7 @@ class Emulator:
         
         
         self.character_width = 10
-        self.character_height = 27                       
+        self.character_height = 30                       
         self.display_height = self.character_height * 16
         self.display_width = self.character_width * 64
         display_size = (self.display_width, self.display_height)
@@ -48,8 +48,8 @@ class Emulator:
             for c in range(0,128):
                 image = pygame.Surface((self.character_width, self.character_height), depth=8)
                 if c in (0x67, 0x6A, 0x70, 0x71, 0x79, 0x2C, 0x3B):
-                    for row in range(4,14):
-                        byte = romBytes[c*16+row-4]
+                    for row in range(5,14):
+                        byte = romBytes[c*16+row-5]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
@@ -57,8 +57,8 @@ class Emulator:
                                 image.set_at((col+1, row*2+2), self.WHITE)
                             bit = bit >> 1
                 else:
-                    for row in range(1,14):
-                        byte = romBytes[c*16+row-1]
+                    for row in range(2,14):
+                        byte = romBytes[c*16+row-2]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
@@ -72,8 +72,8 @@ class Emulator:
                 image = pygame.Surface((self.character_width, self.character_height), depth=8)
                 image.fill(self.WHITE)
                 if c in (0x67, 0x6A, 0x70, 0x71, 0x79, 0x2C, 0x3B):
-                    for row in range(4,14):
-                        byte = romBytes[c*16+row-4]
+                    for row in range(5,14):
+                        byte = romBytes[c*16+row-5]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
@@ -81,8 +81,8 @@ class Emulator:
                                 image.set_at((col+1, row*2+2), self.BLACK)
                             bit = bit >> 1
                 else:
-                    for row in range(1,14):
-                        byte = romBytes[c*16+row-1]
+                    for row in range(2,14):
+                        byte = romBytes[c*16+row-2]
                         bit = 0x80
                         for col in range(0,8):
                             if byte & bit > 0:
@@ -138,7 +138,7 @@ class Emulator:
             pygame.K_s: (0x73,0x53,0x13), 
             pygame.K_t: (0x74,0x54,0x14), 
             pygame.K_u: (0x75,0x55,0x15), 
-            pygame.K_v: (0x76,0x66,0x16), 
+            pygame.K_v: (0x76,0x56,0x16), 
             pygame.K_w: (0x77,0x57,0x17), 
             pygame.K_x: (0x78,0x58,0x18), 
             pygame.K_y: (0x79,0x59,0x19), 
