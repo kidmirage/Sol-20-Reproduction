@@ -1,6 +1,7 @@
 import pygame
 import io8080
 import cpu
+from apscheduler.schedulers.background import BackgroundScheduler
 
 class Emulator:
     """
@@ -14,6 +15,8 @@ class Emulator:
     BLACK = 0
     WHITE = 255
     CAPTION_FORMAT = 'Sol-20 ({})'
+    
+    BLINKING_CURSOR = False
 
     def __init__(self, path=None):
         self.io = io8080.IO()
@@ -39,6 +42,10 @@ class Emulator:
         self.display_width = self.character_width * 64
         display_size = (self.display_width, self.display_height)
         self.current_display_line = 0
+        self.cursor_position = -1
+        self.cursor_character = ''
+        self.cursor_x = 0
+        self.cusror_y = 0
         
         # Create the display characters based on the original Sol-20 ROM.
         self.characters = []
@@ -177,19 +184,57 @@ class Emulator:
         self.screen.fill(self.BLACK)
         
         # Watch the Display memory for changes.
-        self._cpu.watch_memory(self.TEXT_ADDRESS, self.TEXT_ADDRESS + 1024)         
+        self._cpu.watch_memory(self.TEXT_ADDRESS, self.TEXT_ADDRESS + 1024)
         
+        # Initialize the scheduler.
+        self.blink = BackgroundScheduler()
+        self.blink.start()
+        self.blink.add_job(self._invert_character, 'interval', seconds=.5, id='blink_cursor')
+        
+    
+    
+    # Invert the character of the screen at the position specified.
+    def _invert_character(self): 
+        
+        # Get the position and character at the cursor.
+        c = self.cursor_character
+        x = self.cursor_x
+        y = self.cursor_y
+        
+        # Flip the cursor bit in the character.
+        if c > 128:
+            c = c & 0x7F
+        else:
+            c = c | 0x80
+        self.cursor_character = c
+        
+        # Redraw the character.
+        self.screen.blit(self.characters[c],(x,y))
+        
+        # Show the changes.
+        pygame.display.update()
+        
+    
+    # Update the screen with the characters from the shared display memory.
     def _refresh(self):
         """
         Draw the 64 x 16 text array on the screen.
 
         """
-        
+       
         # Display from the current scroll line to the end of the character buffer.
         x = 0
         y = 0
         for i in range(0xCC00+self.io.start_display_line*64, 0xCC00+1024):
+            # Get the next screen character.
             c = self._cpu.memory[i]
+            
+            # Save the position if it is the cursor.
+            if c & 0x80 > 0:
+                self.cursor_position = i - 0xCC00
+                self.cursor_x = x
+                self.cursor_y = y
+                self.cursor_character = c
             
             # Blit the character to the display.
             self.screen.blit(self.characters[c],(x,y))
@@ -203,7 +248,15 @@ class Emulator:
         # Display from the beginning of the character buffer to the current scroll line.
         x = 0
         for i in range(0xCC00,0xCC00+self.io.start_display_line*64):
+            # Get the next screen character.
             c = self._cpu.memory[i]
+            
+            # Save the position if it is the cursor.
+            if c & 0x80 > 0:
+                self.cursor_position = i - 0xCC00
+                self.cursor_character = c
+                self.cursor_x = x
+                self.cursor_y = y
             
             # Blit the character to the display.
             self.screen.blit(self.characters[c],(x,y))
@@ -261,10 +314,19 @@ class Emulator:
         
         # Main loop.
         while True:
+            # Handle external events like keyboard.
             for event in pygame.event.get():
                 self._handle(event)
-
+            
+            # This will run the CPU for about 4K cycles.
             self._cpu.run()
+            
             if self._cpu.has_memory_changed() or self.current_display_line != self.io.start_display_line:
+                self.blink.pause()
                 self._refresh()
                 pygame.display.update()
+            elif self.cursor_position >= 0:
+                # Schedule an interval to flip the cursor.
+                if self.BLINKING_CURSOR:
+                    self.blink.resume()
+                self.cursor_position = -1
