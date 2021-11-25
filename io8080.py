@@ -1,3 +1,8 @@
+import RPi.GPIO as GPIO
+import os
+import sys
+import serial
+
 class IOException(Exception):
     pass
 
@@ -14,10 +19,34 @@ class IO:
     TOE  = 16   # TAPE OVERFLOW ERROR
     TDR  = 64   # TAPE DATA READY
     TTBE = 128  # TAPE TRANSMITTER BUFFER EMPTY
-    SOK  = 1    # SCROLL OK
     
-    TT1  = 128  # Turn on tape 1.  = 128  # Turn on tape 1.
+    # Serial status port bits.
+    SDR   = 64
+    SDROT = 128
+    
+    
+    # Scrolling always enabled.
+    SOK  = 1    # SCROLL OK
+
+    # Cassette control bits.
+    TT1  = 128  # Turn on tape 1.
     TT2  = 64   # Turn on tape 2.
+    
+    # Physical Keyboard Pins
+    KB_STROBE = 5
+    KB_0 = 6    # Key code bits.
+    KB_1 = 13
+    KB_2 = 19
+    KB_3 = 26
+    KB_4 = 21
+    KB_5 = 20
+    KB_6 = 16
+    KB_7 = 12
+    KB_BREAK = 22
+    KB_RESET = 24
+    KB_LOCAL = 23
+    
+    LOCAL_MODE = False
     
     def calculate_crc(self, d, c):
         # SUB C  
@@ -62,7 +91,7 @@ class IO:
         for i in range (len(name), 6):
             crc = self.add_tape_byte(tape, 0x00, crc)
             
-        # Emit the type.
+        # Emit the type.ser = serial.Serial('/dev/ttyUSB0')  # open serial port
         crc = self.add_tape_byte(tape, program_type, crc)
         
         # Emit the size of the data block.
@@ -95,7 +124,7 @@ class IO:
         # Write the last CRC.
         tape.append(crc)
         
-    def load_viurtual_tape(self, f, tape):
+    def load_virtual_tape(self, f, tape):
             
             # Process all the  D lines in a block.
             processing_data = False
@@ -122,8 +151,8 @@ class IO:
                 
                 # Add a program from an external file.
                 if line[0] == "F":     
-                    file_name = line.split(" ")[1]
-                    if file_name.endswith(".ENT"):
+                    file_name = line.split(" ")[1].lower()
+                    if file_name.endswith(".ent"):
                         with open("TAPEs/"+file_name, 'r') as f:
                             file_bytes = bytearray()
                             data_count = 0
@@ -233,10 +262,41 @@ class IO:
         self.current_tape.clear()
         try:
             with open(tape_name, 'r') as f:
-                self.load_viurtual_tape(f, self.current_tape)
+                self.load_virtual_tape(f, self.current_tape)
         except FileNotFoundError:
             print("Problem updating virtual tape.")
-                
+            
+    def key_pressed(self, channel):
+        key = 0
+        if GPIO.input(self.KB_0): key = key | 0b00000001
+        if GPIO.input(self.KB_1): key = key | 0b00000010
+        if GPIO.input(self.KB_2): key = key | 0b00000100
+        if GPIO.input(self.KB_3): key = key | 0b00001000
+        if GPIO.input(self.KB_4): key = key | 0b00010000
+        if GPIO.input(self.KB_5): key = key | 0b00100000
+        if GPIO.input(self.KB_6): key = key | 0b01000000
+        if GPIO.input(self.KB_7): key = key | 0b10000000
+        self.buffer_key(key)
+        
+    def reset_pressed(self, channel):
+        print("Reset pressed.")
+        #os.execv(sys.executable,['python3']+sys.argv)
+        sys.exit()
+    
+    def break_pressed(self, channel):
+        print("Break pressed.")
+        self.buffer_key(0x80)
+    
+    def local_pressed(self, channel):
+        if GPIO.input(self.KB_LOCAL):
+            LOCAL_MODE = False
+            print("Local OFF.")
+        else:
+            LOCAL_MODE = True
+            print("Local ON.")
+    
+    
+
         
     def __init__(self):
         
@@ -261,19 +321,54 @@ class IO:
         # Points to the current position on the tapes.
         self.tape_head = 0
         
+        # Serial port settings.
+        self.baud = 9600
+        self.bytesize = serial.EIGHTBITS
+        self.parity = serial.PARITY_NONE
+        self.stopbits = serial.STOPBITS_ONE
+        
+        # Sense switch.
+        self.sense_switch = 0xFF
+        
         # Load the virtual cassette tapes.
         try:
             with open("TAPEs/TAPE1.svt", 'r') as f:
-                self.load_viurtual_tape(f, self.virtual_tape_1)
+                self.load_virtual_tape(f, self.virtual_tape_1)
         except FileNotFoundError:
             print("There is no virtual cassette tape 1.")
         
         try:
             with open("TAPEs/TAPE2.svt", 'r') as f:
-                self.load_viurtual_tape(f, self.virtual_tape_2)
+                self.load_virtual_tape(f, self.virtual_tape_2)
         except FileNotFoundError:
             print("There is no virtual cassette tape 2.")
-            
+        
+        # Setup physical keyboard handler.
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.KB_STROBE, GPIO.IN)
+        GPIO.setup(self.KB_RESET, GPIO.IN)
+        GPIO.setup(self.KB_BREAK, GPIO.IN)
+        GPIO.setup(self.KB_LOCAL, GPIO.IN)
+        GPIO.setup(self.KB_0, GPIO.IN)
+        GPIO.setup(self.KB_1, GPIO.IN)
+        GPIO.setup(self.KB_2, GPIO.IN)
+        GPIO.setup(self.KB_3, GPIO.IN)
+        GPIO.setup(self.KB_4, GPIO.IN)
+        GPIO.setup(self.KB_5, GPIO.IN)
+        GPIO.setup(self.KB_6, GPIO.IN)
+        GPIO.setup(self.KB_7, GPIO.IN)
+        GPIO.add_event_detect(self.KB_STROBE, GPIO.FALLING, callback=self.key_pressed)
+        GPIO.add_event_detect(self.KB_RESET, GPIO.FALLING, callback=self.reset_pressed)
+        GPIO.add_event_detect(self.KB_BREAK, GPIO.RISING, callback=self.break_pressed)
+        GPIO.add_event_detect(self.KB_LOCAL, GPIO.BOTH, callback=self.local_pressed)
+        
+        # Create a serial port handler.
+        try:
+            # Open serial port. Defaults to 9600 8N1 with no flow control. 
+            ser = serial.Serial('/dev/ttyUSB0',baudrate=self.baud, bytesize=self.bytesize, parity=self.parity, stopbits=self.stopbits)  
+        except:
+            print("Serial port not found.")
+            ser = None
         
     def buffer_key(self, key):
         if (self.num_keys < 10):
@@ -310,6 +405,10 @@ class IO:
             self.virtual_tape_out.append(value)
         elif port == 0xF8:
             print("control" + hex(value))
+        elif port == 0xF9:
+            if ser:
+                # Write a byte to the serial port.
+                ser.write(value)
         else:
             print("O:", hex(port), hex(value))
         
@@ -317,7 +416,7 @@ class IO:
     def input(self, port):
         result = 0
         if port == 0xFF:
-            result = 0xFF
+            result = self.sense_switch
         elif port == 0xFA:
             is_key = self.KDR
             if self.num_keys > 0:
@@ -335,6 +434,19 @@ class IO:
             self.next_key = (self.next_key + 1) % 10
         elif port == 0xFE:
             result = self.SOK
+        elif port == 0xF8:
+            result = 0
+            # Only applies if serial port active.
+            if ser:
+                # Assume that the Serial port buffer can handle the output.
+                result = self.SDROT
+                # Check for serial input.
+                if ser.in_waiting() > 0:
+                    result = result | SDR
+        elif port == 0xF9:
+            result = 0
+            if ser:
+                result = ser.read(1)[0]
         else:
             print("I:", hex(port))
     
