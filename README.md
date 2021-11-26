@@ -5,4 +5,4 @@ So far I have a basic working emulator of a Sol-20 personal computer running the
 
 This work is based on the project matthewmpalen/py8080 with thanks.
 
-The only Python dependency I know of is PyGame.
+Python dependencies that I know of: PyGame, serial, RPi.GPIO (if Raspberry Pi with keyboard attached), apscheduler (if blinking cursor required).
