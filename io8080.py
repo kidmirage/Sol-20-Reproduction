@@ -1,7 +1,13 @@
-import RPi.GPIO as GPIO
 import os
 import sys
-import serial
+import serial  
+
+HAS_KEYBOARD = False
+try:
+    import RPi.GPIO as GPIO
+    HAS_KEYBOARD = True
+except:
+    pass
 
 class IOException(Exception):
     pass
@@ -91,7 +97,7 @@ class IO:
         for i in range (len(name), 6):
             crc = self.add_tape_byte(tape, 0x00, crc)
             
-        # Emit the type.ser = serial.Serial('/dev/ttyUSB0')  # open serial port
+        # Emit the type.
         crc = self.add_tape_byte(tape, program_type, crc)
         
         # Emit the size of the data block.
@@ -268,14 +274,15 @@ class IO:
             
     def key_pressed(self, channel):
         key = 0
-        if GPIO.input(self.KB_0): key = key | 0b00000001
-        if GPIO.input(self.KB_1): key = key | 0b00000010
-        if GPIO.input(self.KB_2): key = key | 0b00000100
-        if GPIO.input(self.KB_3): key = key | 0b00001000
-        if GPIO.input(self.KB_4): key = key | 0b00010000
-        if GPIO.input(self.KB_5): key = key | 0b00100000
-        if GPIO.input(self.KB_6): key = key | 0b01000000
-        if GPIO.input(self.KB_7): key = key | 0b10000000
+        if HAS_KEYBOARD:
+            if GPIO.input(self.KB_0): key = key | 0b00000001
+            if GPIO.input(self.KB_1): key = key | 0b00000010
+            if GPIO.input(self.KB_2): key = key | 0b00000100
+            if GPIO.input(self.KB_3): key = key | 0b00001000
+            if GPIO.input(self.KB_4): key = key | 0b00010000
+            if GPIO.input(self.KB_5): key = key | 0b00100000
+            if GPIO.input(self.KB_6): key = key | 0b01000000
+            if GPIO.input(self.KB_7): key = key | 0b10000000
         self.buffer_key(key)
         
     def reset_pressed(self, channel):
@@ -288,12 +295,13 @@ class IO:
         self.buffer_key(0x80)
     
     def local_pressed(self, channel):
-        if GPIO.input(self.KB_LOCAL):
-            LOCAL_MODE = False
-            print("Local OFF.")
-        else:
-            LOCAL_MODE = True
-            print("Local ON.")
+        if HAS_KEYBOARD:
+            if GPIO.input(self.KB_LOCAL):
+                LOCAL_MODE = False
+                print("Local OFF.")
+            else:
+                LOCAL_MODE = True
+                print("Local ON.")
     
     
 
@@ -344,24 +352,25 @@ class IO:
             print("There is no virtual cassette tape 2.")
         
         # Setup physical keyboard handler.
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.KB_STROBE, GPIO.IN)
-        GPIO.setup(self.KB_RESET, GPIO.IN)
-        GPIO.setup(self.KB_BREAK, GPIO.IN)
-        GPIO.setup(self.KB_LOCAL, GPIO.IN)
-        GPIO.setup(self.KB_0, GPIO.IN)
-        GPIO.setup(self.KB_1, GPIO.IN)
-        GPIO.setup(self.KB_2, GPIO.IN)
-        GPIO.setup(self.KB_3, GPIO.IN)
-        GPIO.setup(self.KB_4, GPIO.IN)
-        GPIO.setup(self.KB_5, GPIO.IN)
-        GPIO.setup(self.KB_6, GPIO.IN)
-        GPIO.setup(self.KB_7, GPIO.IN)
-        GPIO.add_event_detect(self.KB_STROBE, GPIO.FALLING, callback=self.key_pressed)
-        GPIO.add_event_detect(self.KB_RESET, GPIO.FALLING, callback=self.reset_pressed)
-        GPIO.add_event_detect(self.KB_BREAK, GPIO.RISING, callback=self.break_pressed)
-        GPIO.add_event_detect(self.KB_LOCAL, GPIO.BOTH, callback=self.local_pressed)
-        
+        if HAS_KEYBOARD:
+            GPIO.setmode(GPIO.BCM)
+            GPIO.setup(self.KB_STROBE, GPIO.IN)
+            GPIO.setup(self.KB_RESET, GPIO.IN)
+            GPIO.setup(self.KB_BREAK, GPIO.IN)
+            GPIO.setup(self.KB_LOCAL, GPIO.IN)
+            GPIO.setup(self.KB_0, GPIO.IN)
+            GPIO.setup(self.KB_1, GPIO.IN)
+            GPIO.setup(self.KB_2, GPIO.IN)
+            GPIO.setup(self.KB_3, GPIO.IN)
+            GPIO.setup(self.KB_4, GPIO.IN)
+            GPIO.setup(self.KB_5, GPIO.IN)
+            GPIO.setup(self.KB_6, GPIO.IN)
+            GPIO.setup(self.KB_7, GPIO.IN)
+            GPIO.add_event_detect(self.KB_STROBE, GPIO.FALLING, callback=self.key_pressed)
+            GPIO.add_event_detect(self.KB_RESET, GPIO.FALLING, callback=self.reset_pressed)
+            GPIO.add_event_detect(self.KB_BREAK, GPIO.RISING, callback=self.break_pressed)
+            GPIO.add_event_detect(self.KB_LOCAL, GPIO.BOTH, callback=self.local_pressed)
+            
         # Create a serial port handler.
         try:
             # Open serial port. Defaults to 9600 8N1 with no flow control. 

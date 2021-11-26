@@ -59,6 +59,7 @@ class Emulator:
         self.is_cursor = False
         self.blinking_cursor = False
         self.rom_filename = "ROMs/6574.bin"
+        self.full_screen = False
         
         # Load the switches configuration.
         with open("switches.cfg" ,'r') as f:
@@ -105,6 +106,9 @@ class Emulator:
                         elif bit == 8:
                             if value == 1:
                                 self.rom_filename = "ROMs/6575.bin"
+                        elif bit == 9:
+                            if value == 1:
+                                self.full_screen = True
                         else:
                             print("Bad configuration file. No bit "+bit+" for switch 1.")
                             sys.exit(1)
@@ -349,9 +353,13 @@ class Emulator:
             pygame.K_BREAK: (0x80,0x80,0x80)}
          
         # Create the screen.
-        self.screen = pygame.display.set_mode(display_size, pygame.NOFRAME+pygame.FULLSCREEN)
+        if self.full_screen:
+            self.screen = pygame.display.set_mode(display_size, pygame.NOFRAME+pygame.FULLSCREEN)
+            pygame.mouse.set_visible(0)
+        else:
+            self.screen = pygame.display.set_mode(display_size)
         pygame.display.set_caption(self.CAPTION_FORMAT.format(self._path))
-        pygame.mouse.set_visible(0)
+        
         
         # Clear the screen.
         self.screen.fill(self.BLACK)
