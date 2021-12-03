@@ -1,4 +1,3 @@
-import os
 import sys
 import serial  
 
@@ -52,7 +51,11 @@ class IO:
     KB_RESET = 24
     KB_LOCAL = 23
     
+    # Status of the Local key.
     LOCAL_MODE = False
+    
+    # Serial port if one is present.
+    ser = None
     
     def calculate_crc(self, d, c):
         # SUB C  
@@ -286,12 +289,10 @@ class IO:
         self.buffer_key(key)
         
     def reset_pressed(self, channel):
-        print("Reset pressed.")
         #os.execv(sys.executable,['python3']+sys.argv)
         sys.exit()
     
     def break_pressed(self, channel):
-        print("Break pressed.")
         self.buffer_key(0x80)
     
     def local_pressed(self, channel):
@@ -302,10 +303,7 @@ class IO:
             else:
                 LOCAL_MODE = True
                 print("Local ON.")
-    
-    
-
-        
+     
     def __init__(self):
         
         # Used for virtual keyboard.      
@@ -359,7 +357,7 @@ class IO:
             GPIO.setup(self.KB_BREAK, GPIO.IN)
             GPIO.setup(self.KB_LOCAL, GPIO.IN)
             GPIO.setup(self.KB_0, GPIO.IN)
-            GPIO.setup(self.KB_1, GPIO.IN)
+            GPIO.setup(self.KB_1, GPIO.IN) 
             GPIO.setup(self.KB_2, GPIO.IN)
             GPIO.setup(self.KB_3, GPIO.IN)
             GPIO.setup(self.KB_4, GPIO.IN)
@@ -377,7 +375,6 @@ class IO:
             ser = serial.Serial('/dev/ttyUSB0',baudrate=self.baud, bytesize=self.bytesize, parity=self.parity, stopbits=self.stopbits)  
         except:
             print("Serial port not found.")
-            ser = None
         
     def buffer_key(self, key):
         if (self.num_keys < 10):
@@ -386,6 +383,7 @@ class IO:
             self.num_keys = self.num_keys + 1
 
     def output(self, port, value):
+        global ser
         if port == 0xFE:
             # Display scrolling control.
             self.start_display_line = value
@@ -416,13 +414,14 @@ class IO:
             print("control" + hex(value))
         elif port == 0xF9:
             if ser:
-                # Write a byte to the serial port.
+                # Write a byte to the serial( port.
                 ser.write(value)
         else:
             print("O:", hex(port), hex(value))
         
 
     def input(self, port):
+        global ser
         result = 0
         if port == 0xFF:
             result = self.sense_switch
@@ -451,7 +450,7 @@ class IO:
                 result = self.SDROT
                 # Check for serial input.
                 if ser.in_waiting() > 0:
-                    result = result | SDR
+                    result = result | self.SDR
         elif port == 0xF9:
             result = 0
             if ser:

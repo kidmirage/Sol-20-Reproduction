@@ -49,9 +49,7 @@ class CPU:
         self._watch_memory_low = 0
         self._watch_memory_high = 0
         self._watch_memory_changed = False
-        
-        self._debug = False
-        self._num_debugs = 0
+
                 
     @property
     def memory(self):
@@ -165,6 +163,19 @@ class CPU:
     def _call_interrupt(self, address):
         self._stack_push(self._pc)
         self._pc = address
+        
+    def _get_parity(self, value):
+        bit = 1
+        total_set = 0
+        for _ in range(0,8):
+            if bit & value > 0:
+                total_set += 1
+            bit = bit << 1
+        if total_set % 2 == 0:
+            return True
+        else:
+            return False
+            
 
     def _nop(self):
         """
@@ -623,7 +634,7 @@ class CPU:
         elif self._current_inst == 0x23:
             self.set_hl(self._hl + 1)
         elif self._current_inst == 0x33:
-            self._sp = (self._sp + 1) & 0xFF
+            self._sp = (self._sp + 1)
 
         self._cycles += 6
 
@@ -661,7 +672,7 @@ class CPU:
         elif self._current_inst == 0x2B:
             self.set_hl(self._hl - 1)
         elif self._current_inst == 0x3B:
-            self._sp = (self._sp - 1) & 0xFF
+            self._sp = (self._sp - 1)
         else:
             raise InvalidInstruction('DCX: {}'.format(self._current_inst))
 
@@ -948,6 +959,8 @@ class CPU:
             self.__sub(self._h, carry=carry)
         elif self._current_inst == 0x9D:
             self.__sub(self._l, carry=carry)
+        elif self._current_inst == 0x9E:
+            self.__sub(self.read_byte(self._hl), carry=carry)
         
         self._cycles += 4
 
@@ -1235,13 +1248,13 @@ class CPU:
             self._a += 0x06
             self._half_carry = True
 
-        if (self._a > 0x9F) or self._carry:
+        if ((self._a >> 4) > 9) or self._carry:
             self._a += 0x60
             self._carry = True
 
         self._zero = True if self._a == 0 else False
         self._sign = True if (self._a & 0x80) > 0 else False
-        self._parity = True if self._a % 2 == 0 else False
+        self._parity = self._get_parity(self._a)
         self._cycles += 4
 
     def _cma(self):
@@ -1300,9 +1313,10 @@ class CPU:
 
     def add_hl(self, data):
         value = self._hl + data
-        self.set_hl(value)
         if value > 0xFFFF:
             self._carry = True
+            value = value & 0xFFFF
+        self.set_hl(value)
 
     def _incr(self, data):
         # i++
@@ -1311,7 +1325,7 @@ class CPU:
         self._zero = True if value == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
         self._half_carry = True if data == 0x0F else False
-        self._parity = True if value % 2 == 0 else False
+        self._parity = self._get_parity(value)
         return value
 
     def _decr(self, data):
@@ -1321,7 +1335,7 @@ class CPU:
         self._half_carry = True if (data & 0x0F) == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
         self._zero = True if value == 0 else False
-        self._parity = True if value % 2 == 0 else False
+        self._parity = self._get_parity(value)
         return value
 
     def _and(self, value):
@@ -1332,21 +1346,21 @@ class CPU:
         self._carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
-        self._parity = True if self._a % 2 == 0 else False
+        self._parity = self._get_parity(self._a)
 
     def _xor(self, value):
         self._a = self._a ^ value
         self._carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
-        self._parity = True if self._a % 2 == 0 else False
+        self._parity = self._get_parity(self._a)
 
     def _or(self, value):
         self._a = self._a | value
         self._carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
-        self._parity = True if self._a % 2 == 0 else False
+        self._parity = self._get_parity(self._a)
 
     def __add(self, in_value, carry=0):
         value = self._a + in_value + carry
@@ -1360,7 +1374,7 @@ class CPU:
         self._carry = True if value > 255 or value < 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
         self._zero = True if self._a == 0 else False
-        self._parity = True if self._a % 2 == 0 else False
+        self._parity = self._get_parity(self._a)
 
     def __sub(self, in_value, carry=0):
         value = self._a - (in_value + carry)
@@ -1375,7 +1389,7 @@ class CPU:
         self._a = value & 0xFF
         self._sign = True if x & 0x80 > 0 else False
         self._zero = True if x == 0 else False
-        self._parity = True if x % 2 == 0 else False
+        self._parity = self._get_parity(x)
 
     def _cmp_sub(self, in_value):
         value = self._a - in_value
@@ -1387,12 +1401,12 @@ class CPU:
 
         self._zero = True if value & 0xFF == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
-        self._parity = True if value % 2 == 0 else False
+        self._parity = self._get_parity(value)
 
     def _stack_push(self, data):
         if data > 0xFFFF:
-            #raise StackException(
-            #   'Push error: data={}, count={}'.format(data, self._count))
+            raise StackException(
+               'Push error: data={}, count={}'.format(data, self._count))
             data = data & 0xFFFF
             print('Push error: data={}, count={}'.format(data, self._count))
 
@@ -1416,21 +1430,19 @@ class CPU:
         return (self._memory[address + 1] << 8) + self._memory[address]
 
     def write_byte(self, address, data):
-        self.check_memory_changed(address)
-        self._memory[address] = data & 0xFF
+        # Don't write to ROM.
+        if address < 0xC000 or address > 0xC7FF:
+            self.check_memory_changed(address)
+            self._memory[address] = data & 0xFF
 
     def write_2bytes(self, address, data):
-        self._memory[address + 1] = data >> 8
-        self._memory[address] = data & 0xFF
+        if address < 0xC000-1 or address > 0xC7FF:
+            self._memory[address + 1] = data >> 8
+            self._memory[address] = data & 0xFF
 
     def fetch_rom_next_byte(self):
         # Read next 8 bits
         data = self._memory[self._pc]
-        if self._pc == 0x100 and self._num_debugs == 0:
-            self._debug = True
-        if self._debug and (self._pc < 0x0100 or self._pc > 0x0CC0):
-            self._num_debugs = 101
-            self._debug = False
         self._pc += 1
         return data
 
