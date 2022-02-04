@@ -1244,13 +1244,21 @@ class CPU:
         :return:
         """
 
-        if (self._a & 0x0F) > 9 or self._half_carry:
+        low_nibble = self._a & 0x0F
+        if low_nibble > 9 or self._half_carry:
             self._a += 0x06
-            self._half_carry = True
+            if low_nibble > 9:
+                self._half_carry = True
+            else:
+                self._half_carry = False
 
-        if ((self._a >> 4) > 9) or self._carry:
+        high_nibble = (self._a >> 4) & 0x0F
+        if high_nibble > 9 or self._carry:
             self._a += 0x60
-            self._carry = True
+            if high_nibble > 9:
+                self._carry = True
+            else:
+                self._carry = False
 
         self._zero = True if self._a == 0 else False
         self._sign = True if (self._a & 0x80) > 0 else False
@@ -1324,7 +1332,7 @@ class CPU:
         value = (data + 1) & 0xFF
         self._zero = True if value == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
-        self._half_carry = True if data == 0x0F else False
+        self._half_carry = True if (value & 0x0f) == 0 else False
         self._parity = self._get_parity(value)
         return value
 
@@ -1332,7 +1340,7 @@ class CPU:
         # i--
 
         value = (data - 1) & 0xFF
-        self._half_carry = True if (data & 0x0F) == 0 else False
+        self._half_carry = True if data & 0x0f > 0 else False       
         self._sign = True if (value & 0x80) > 0 else False
         self._zero = True if value == 0 else False
         self._parity = self._get_parity(value)
@@ -1365,7 +1373,8 @@ class CPU:
     def __add(self, in_value, carry=0):
         value = self._a + in_value + carry
 
-        if (((self._a ^ value) ^ in_value) & 0x10) > 0:
+        lsn_sum = (self._a & 0x0f) + (in_value & 0x0f) + carry
+        if lsn_sum > 15:
             self._half_carry = True
         else:
             self._half_carry = False
@@ -1377,13 +1386,13 @@ class CPU:
         self._parity = self._get_parity(self._a)
 
     def __sub(self, in_value, carry=0):
-        value = self._a - (in_value + carry)
+        value = self._a - in_value - carry
         x = value & 0xFF
-
-        if ((self._a ^ value) ^ in_value) & 0x10 > 0:
-            self._half_carry = True
-        else:
+        lsn_diff = (self._a & 0x0f) - (in_value & 0x0f) - carry
+        if lsn_diff < 0:
             self._half_carry = False
+        else:
+            self._half_carry = True
 
         self._carry = True if value > 255 or value < 0 else  False
         self._a = value & 0xFF
@@ -1393,12 +1402,10 @@ class CPU:
 
     def _cmp_sub(self, in_value):
         value = self._a - in_value
+        
+        lsn_diff = (self._a & 0x0f) - (in_value & 0x0f)
+        self._half_carry = False if lsn_diff < 0 else True
         self._carry = True if value >= 255 or value < 0 else False
-        if ((self._a ^ value) ^ in_value) & 0x10 > 0:
-            self._half_carry = True
-        else:
-            self._half_carry = False
-
         self._zero = True if value & 0xFF == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
         self._parity = self._get_parity(value)
