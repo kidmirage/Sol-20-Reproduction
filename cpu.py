@@ -133,6 +133,7 @@ class CPU:
             value += 0x10
 
         return value
+        
 
     def step(self):
         """
@@ -309,7 +310,7 @@ class CPU:
         self._cycles += 11
 
         if self._current_inst == 0xCD:
-            # CALL adr	3		(SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP+2;PC=adr
+            # CALL adr    3        (SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP+2;PC=adr
             self._stack_push(self._pc)
             self._pc = data_16
             self._cycles += 6
@@ -376,7 +377,7 @@ class CPU:
             condition = self._sign
         elif self._current_inst == 0xF0:
             # RP
-            condition = self._sign
+            condition = not self._sign
         elif self._current_inst == 0xE0:
             # RPO
             condition = not self._parity
@@ -1254,7 +1255,7 @@ class CPU:
 
         high_nibble = (self._a >> 4) & 0x0F
         if high_nibble > 9 or self._carry:
-            self._a += 0x60
+            self._a = (self._a + 0x60) & 0xFF
             if high_nibble > 9:
                 self._carry = True
             else:
@@ -1332,7 +1333,7 @@ class CPU:
         value = (data + 1) & 0xFF
         self._zero = True if value == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
-        self._half_carry = True if (value & 0x0f) == 0 else False
+        self._half_carry = True if (value & 0x0F) == 0 else False
         self._parity = self._get_parity(value)
         return value
 
@@ -1340,7 +1341,7 @@ class CPU:
         # i--
 
         value = (data - 1) & 0xFF
-        self._half_carry = True if data & 0x0f > 0 else False       
+        self._half_carry = True if data & 0x0f > 0 else False 
         self._sign = True if (value & 0x80) > 0 else False
         self._zero = True if value == 0 else False
         self._parity = self._get_parity(value)
@@ -1352,6 +1353,7 @@ class CPU:
 
         self._a = (self._a & value) & 0xFF
         self._carry = False
+        self._half_carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
         self._parity = self._get_parity(self._a)
@@ -1359,6 +1361,7 @@ class CPU:
     def _xor(self, value):
         self._a = self._a ^ value
         self._carry = False
+        self._half_carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
         self._parity = self._get_parity(self._a)
@@ -1366,6 +1369,7 @@ class CPU:
     def _or(self, value):
         self._a = self._a | value
         self._carry = False
+        self._half_carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
         self._parity = self._get_parity(self._a)
@@ -1386,8 +1390,9 @@ class CPU:
         self._parity = self._get_parity(self._a)
 
     def __sub(self, in_value, carry=0):
-        value = self._a - in_value - carry
+        value = self._a - (in_value + carry)
         x = value & 0xFF
+
         lsn_diff = (self._a & 0x0f) - (in_value & 0x0f) - carry
         if lsn_diff < 0:
             self._half_carry = False
@@ -1402,10 +1407,10 @@ class CPU:
 
     def _cmp_sub(self, in_value):
         value = self._a - in_value
-        
+        self._carry = True if value >= 255 or value < 0 else False
         lsn_diff = (self._a & 0x0f) - (in_value & 0x0f)
         self._half_carry = False if lsn_diff < 0 else True
-        self._carry = True if value >= 255 or value < 0 else False
+
         self._zero = True if value & 0xFF == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
         self._parity = self._get_parity(value)
