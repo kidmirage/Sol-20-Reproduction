@@ -1325,6 +1325,8 @@ class CPU:
         if value > 0xFFFF:
             self._carry = True
             value = value & 0xFFFF
+        else: 
+            self._carry = False
         self.set_hl(value)
 
     def _incr(self, data):
@@ -1353,7 +1355,6 @@ class CPU:
 
         self._a = (self._a & value) & 0xFF
         self._carry = False
-        self._half_carry = False
         self._zero = True if self._a == 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
         self._parity = self._get_parity(self._a)
