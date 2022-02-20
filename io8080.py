@@ -1,5 +1,6 @@
 import sys
 import serial  
+import tkinter.filedialog
 
 HAS_KEYBOARD = False
 try:
@@ -178,14 +179,16 @@ class IO:
                                     # Assume bytes are contiguous.
                                     tokens = inline.split(":")
                                     address = int(tokens[0], 16)
-                                    if old_address > 0 and address - old_address != 16:
-                                        print("not contiguous", hex(address), hex(old_address))
-                                    old_address = address
+                                    if old_address != 0 and old_address != address:
+                                        for i in range(old_address,address):
+                                            file_bytes.append(int(0))
+                                            data_count += 1
                                     data = tokens[1].strip().split(" ")
                                     for i in range(0, len(data)): 
                                         file_bytes.append(int(data[i].replace('/', ''), 16))
                                         data_count += 1
-                                        
+                                        address += 1
+                                    old_address = address
                             # Program name can only be 5 characters.
                             name = file_name.split(".")[0].upper()
                             name = name[0:5]
@@ -289,28 +292,47 @@ class IO:
         self.buffer_key(key)
         
     def reset_pressed(self, channel):
-        #os.execv(sys.executable,['python3']+sys.argv)
         sys.exit()
     
     def break_pressed(self, channel):
         self.buffer_key(0x80)
     
     def local_pressed(self, channel):
+        global LOCAL_MODE
         if HAS_KEYBOARD:
             if GPIO.input(self.KB_LOCAL):
                 LOCAL_MODE = False
-                print("Local OFF.")
             else:
                 LOCAL_MODE = True
-                print("Local ON.")
+                self.prompt_file()
+            
+            
+    # Get the name of a file to load.
+    def prompt_file(self):
+        # Create a Tk file dialog and cleanup when finished"""
+        top = tkinter.Tk()
+        top.withdraw()  # hide window
+        file_name = tkinter.filedialog.askopenfilename(parent=top,  title='Open an input file:')
+        if file_name:
+            with open(file_name, 'rb') as f:
+                file_bytes = f.read()
+                self.file_input(file_bytes)
+        top.destroy()
      
     def __init__(self):
+        
+        global ser
         
         # Used for virtual keyboard.      
         self.key_buffer = bytearray(10)
         self.next_key = 0
         self.add_key = 0
         self.num_keys = 0
+        
+        # Used when accepting input from a file.
+        self.file_buffer = None
+        self.next_char = 0
+        self.num_chars = 0
         
         # Used by virtual display to control scrolling.
         self.start_display_line = 0
@@ -381,6 +403,29 @@ class IO:
             self.key_buffer[self.add_key] = key
             self.add_key = (self.add_key + 1) % 10
             self.num_keys = self.num_keys + 1
+            
+    def file_input(self, buffer):
+        self.file_buffer = bytearray(buffer)
+        self.file_buffer.append(10) # Make sure there is a Line Feed at the end.
+        self.next_char = 0
+        self.num_chars = len(self.file_buffer)
+            
+    def get_input(self):
+        key = 0
+        if self.next_char < self.num_chars:
+            key = self.file_buffer[self.next_char]
+            if key == 13: key = 10   # Ignore Carriage Returns
+            self.next_char += 1
+            if self.next_char == self.num_chars:
+                self.file_buffer = None
+                self.next_char = 0
+                self.num_chars = 0
+            
+        elif self.num_keys > 0:
+            key = self.key_buffer[self.next_key]
+            self.num_keys -= 1
+            self.next_key = (self.next_key + 1) % 10
+        return key
 
     def output(self, port, value):
         global ser
@@ -418,7 +463,6 @@ class IO:
                 ser.write(value)
         else:
             print("O:", hex(port), hex(value))
-        
 
     def input(self, port):
         global ser
@@ -427,7 +471,7 @@ class IO:
             result = self.sense_switch
         elif port == 0xFA:
             is_key = self.KDR
-            if self.num_keys > 0:
+            if self.num_keys > 0 or self.next_char < self.num_chars:
                 is_key = 0
             is_tape = 0
             if self.tape_head < len(self.current_tape):
@@ -437,9 +481,7 @@ class IO:
             result = self.current_tape[self.tape_head]
             self.tape_head = self.tape_head + 1   
         elif port == 0xFC:
-            result = self.key_buffer[self.next_key]
-            self.num_keys -= 1
-            self.next_key = (self.next_key + 1) % 10
+            result = self.get_input()
         elif port == 0xFE:
             result = self.SOK
         elif port == 0xF8:

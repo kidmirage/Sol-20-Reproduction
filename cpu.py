@@ -12,6 +12,8 @@ MAX_CYCLES = 0x411B
 
 logger = logging.getLogger('cpu')
 
+parity_table = []
+
 
 class CPU:
     def __init__(self, memory, io):
@@ -49,7 +51,8 @@ class CPU:
         self._watch_memory_low = 0
         self._watch_memory_high = 0
         self._watch_memory_changed = False
-
+        
+        self._set_parity_table()
                 
     @property
     def memory(self):
@@ -134,7 +137,6 @@ class CPU:
 
         return value
         
-
     def step(self):
         """
         Executes an instruction and updates processor state
@@ -143,6 +145,10 @@ class CPU:
         """
 
         self._current_inst = self.fetch_rom_next_byte()
+        
+        #if self._pc >= 0x0113 and self._pc < 0x12a2:
+        #    self.dump_inst() 
+        
         instruction = self._instructions[self._current_inst]
         if instruction is not None:
             instruction()
@@ -165,18 +171,22 @@ class CPU:
         self._stack_push(self._pc)
         self._pc = address
         
+    def _set_parity_table(self):
+        
+        for value in range(0,256):
+            bit = 1
+            total_set = 0
+            for _ in range(0,8):
+                if bit & value > 0:
+                    total_set += 1
+                bit = bit << 1
+            if total_set % 2 == 0:
+                parity_table.append(True)
+            else:
+                parity_table.append(False)
+                
     def _get_parity(self, value):
-        bit = 1
-        total_set = 0
-        for _ in range(0,8):
-            if bit & value > 0:
-                total_set += 1
-            bit = bit << 1
-        if total_set % 2 == 0:
-            return True
-        else:
-            return False
-            
+        return parity_table[value]
 
     def _nop(self):
         """
@@ -310,7 +320,7 @@ class CPU:
         self._cycles += 11
 
         if self._current_inst == 0xCD:
-            # CALL adr    3        (SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP+2;PC=adr
+            # CALL adr	3		(SP-1)<-PC.hi;(SP-2)<-PC.lo;SP<-SP+2;PC=adr
             self._stack_push(self._pc)
             self._pc = data_16
             self._cycles += 6
@@ -327,6 +337,9 @@ class CPU:
         elif self._current_inst == 0xDC:
             # CC
             condition = self._carry
+        elif self._current_inst == 0xF4:
+            # CP
+            condition = not self._sign
         elif self._current_inst == 0xFC:
             # CM
             condition = self._sign
@@ -336,9 +349,6 @@ class CPU:
         elif self._current_inst == 0xEC:
             # CPE
             condition = self._parity
-        elif self._current_inst == 0xF4:
-            # CP
-            condition = not self._sign
 
         if condition:
             self._stack_push(self._pc)
@@ -629,13 +639,13 @@ class CPU:
         """
 
         if self._current_inst == 0x03:
-            self.set_bc(self._bc + 1)
+            self.set_bc((self._bc + 1) & 0xffff)
         elif self._current_inst == 0x13:
-            self.set_de(self._de + 1)
+            self.set_de((self._de + 1) & 0xffff)
         elif self._current_inst == 0x23:
-            self.set_hl(self._hl + 1)
+            self.set_hl((self._hl + 1) & 0xffff)
         elif self._current_inst == 0x33:
-            self._sp = (self._sp + 1)
+            self._sp = ((self._sp + 1) & 0xffff)
 
         self._cycles += 6
 
@@ -667,13 +677,13 @@ class CPU:
         """
 
         if self._current_inst == 0x0B:
-            self.set_bc(self._bc - 1)
+            self.set_bc((self._bc - 1) & 0xffff)
         elif self._current_inst == 0x1B:
-            self.set_de(self._de - 1)
+            self.set_de((self._de - 1) & 0xffff)
         elif self._current_inst == 0x2B:
-            self.set_hl(self._hl - 1)
+            self.set_hl((self._hl - 1) & 0xffff)
         elif self._current_inst == 0x3B:
-            self._sp = (self._sp - 1)
+            self._sp = ((self._sp - 1) & 0xffff)
         else:
             raise InvalidInstruction('DCX: {}'.format(self._current_inst))
 
@@ -1244,28 +1254,22 @@ class CPU:
 
         :return:
         """
-
-        low_nibble = self._a & 0x0F
-        if low_nibble > 9 or self._half_carry:
-            self._a += 0x06
-            if low_nibble > 9:
-                self._half_carry = True
-            else:
-                self._half_carry = False
-
-        high_nibble = (self._a >> 4) & 0x0F
-        if high_nibble > 9 or self._carry:
-            self._a = (self._a + 0x60) & 0xFF
-            if high_nibble > 9:
-                self._carry = True
-            else:
-                self._carry = False
-
-        self._zero = True if self._a == 0 else False
-        self._sign = True if (self._a & 0x80) > 0 else False
-        self._parity = self._get_parity(self._a)
-        self._cycles += 4
-
+        a = 0
+        c = self._carry
+        
+        lsb = self._a & 0x0F
+        msb = self._a >> 4
+        
+        if lsb > 9 or self._half_carry:
+            a += 0x06
+           
+        if msb > 9 or self._carry or (msb >=9 and lsb >9):
+            a += 0x60
+            c = True
+        
+        self.__add(a, 0)
+        self._carry = c
+        
     def _cma(self):
         """
         Complement A
@@ -1325,7 +1329,7 @@ class CPU:
         if value > 0xFFFF:
             self._carry = True
             value = value & 0xFFFF
-        else: 
+        else:
             self._carry = False
         self.set_hl(value)
 
@@ -1352,7 +1356,9 @@ class CPU:
     def _and(self, value):
         if value > 0x0FF:
             raise ValueError('{} is not a valid value for _and'.format(value))
-
+        
+        self._half_carry = True if (self._a | value) & 0x08 != 0 else False
+        
         self._a = (self._a & value) & 0xFF
         self._carry = False
         self._zero = True if self._a == 0 else False
@@ -1377,13 +1383,8 @@ class CPU:
 
     def __add(self, in_value, carry=0):
         value = self._a + in_value + carry
-
-        lsn_sum = (self._a & 0x0f) + (in_value & 0x0f) + carry
-        if lsn_sum > 15:
-            self._half_carry = True
-        else:
-            self._half_carry = False
-
+        
+        self._half_carry = True if (self._a & 0x0f) + (in_value & 0x0f) + carry > 0x0f else False
         self._a = value & 0xFF
         self._carry = True if value > 255 or value < 0 else False
         self._sign = True if self._a & 0x80 > 0 else False
@@ -1393,13 +1394,8 @@ class CPU:
     def __sub(self, in_value, carry=0):
         value = self._a - (in_value + carry)
         x = value & 0xFF
-
         lsn_diff = (self._a & 0x0f) - (in_value & 0x0f) - carry
-        if lsn_diff < 0:
-            self._half_carry = False
-        else:
-            self._half_carry = True
-
+        self._half_carry = True if lsn_diff >= 0 else False
         self._carry = True if value > 255 or value < 0 else  False
         self._a = value & 0xFF
         self._sign = True if x & 0x80 > 0 else False
@@ -1408,10 +1404,10 @@ class CPU:
 
     def _cmp_sub(self, in_value):
         value = self._a - in_value
-        self._carry = True if value >= 255 or value < 0 else False
+        
         lsn_diff = (self._a & 0x0f) - (in_value & 0x0f)
-        self._half_carry = False if lsn_diff < 0 else True
-
+        self._half_carry = True if lsn_diff >= 0 else False
+        self._carry = True if value >= 255 or value < 0 else False
         self._zero = True if value & 0xFF == 0 else False
         self._sign = True if (value & 0x80) > 0 else False
         self._parity = self._get_parity(value)

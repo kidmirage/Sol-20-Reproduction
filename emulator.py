@@ -474,6 +474,10 @@ class Emulator:
             self._blit_character(self.cursor_character & 0x7f, self.cursor_x, self.cursor_y)
         
     def process_key(self, key, mod):
+        # Test load from file.
+        if key == pygame.K_l and mod & pygame.KMOD_ALT:
+            self.io.prompt_file()
+            return 0
         keys = self.keymap.get(key)
         if keys != None:
             if mod & pygame.KMOD_CTRL > 0:
