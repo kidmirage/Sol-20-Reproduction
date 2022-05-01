@@ -197,7 +197,7 @@ class IO:
                             
                             # Now write the data.
                             self.write_data_with_crc(tape, file_bytes)                       
-                    elif file_name.endswith(".HEX"):
+                    elif file_name.endswith(".hex"):
                         with open("TAPEs/"+file_name, 'rb') as f:
                             tape.extend(f.read(-1))
                             
